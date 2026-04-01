@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Neon Tic Tac Toe AI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <style>
+    body {
+      margin: 0;
+      background: #050505;
+      color: #0ff;
+      font-family: Arial;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+
+    h1 {
+      color: #0ff;
+      text-shadow: 0 0 10px #0ff;
+    }
+
+    #status {
+      margin: 10px;
+    }
+
+    #board {
+      display: grid;
+      grid-template-columns: repeat(3, 90px);
+      gap: 12px;
+    }
+
+    .cell {
+      width: 90px;
+      height: 90px;
+      background: #111;
+      border-radius: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      cursor: pointer;
+      box-shadow: 0 0 10px #0ff;
+      transition: 0.2s;
+    }
+
+    .cell:hover {
+      transform: scale(1.1);
+      box-shadow: 0 0 20px #0ff;
+    }
+
+    button {
+      margin-top: 15px;
+      padding: 10px 20px;
+      background: #111;
+      color: #0ff;
+      border: 1px solid #0ff;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<h1>❌⭕ Neon AI Game</h1>
+<div id="status">Your Turn (X)</div>
+<div id="board"></div>
+<button onclick="resetGame()">Restart</button>
+
+<script>
+let board = ["","","","","","","","",""];
+let gameOver = false;
+
+const patterns = [
+  [0,1,2],[3,4,5],[6,7,8],
+  [0,3,6],[1,4,7],[2,5,8],
+  [0,4,8],[2,4,6]
+];
+
+const boardEl = document.getElementById("board");
+const statusEl = document.getElementById("status");
+
+// 🔊 sound
+function playSound(type) {
+  let audio = new Audio(
+    type === "win"
+      ? "https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"
+      : "https://actions.google.com/sounds/v1/cartoon/pop.ogg"
+  );
+  audio.play();
+}
+
+// 📳 vibration
+function vibrate() {
+  if (navigator.vibrate) navigator.vibrate(100);
+}
+
+function render() {
+  boardEl.innerHTML = "";
+  board.forEach((val,i) => {
+    let cell = document.createElement("div");
+    cell.className = "cell";
+    cell.innerText = val;
+    cell.onclick = () => playerMove(i);
+    boardEl.appendChild(cell);
+  });
+}
+
+function playerMove(i) {
+  if (board[i] || gameOver) return;
+
+  board[i] = "X";
+  playSound("tap");
+  vibrate();
+
+  if (checkWin("X")) return;
+
+  render();
+  statusEl.innerText = "AI Thinking...";
+
+  setTimeout(aiMove, 400);
+}
+
+function aiMove() {
+  let empty = board.map((v,i) => v === "" ? i : null).filter(v => v !== null);
+  let move = empty[Math.floor(Math.random() * empty.length)];
+
+  board[move] = "O";
+  playSound("tap");
+
+  if (checkWin("O")) return;
+
+  render();
+  statusEl.innerText = "Your Turn (X)";
+}
+
+function checkWin(player) {
+  for (let p of patterns) {
+    let [a,b,c] = p;
+    if (board[a] === player && board[b] === player && board[c] === player) {
+      statusEl.innerText = (player === "X" ? "🎉 You Win!" : "🤖 AI Wins!");
+      playSound("win");
+      vibrate();
+      gameOver = true;
+      return true;
+    }
+  }
+
+  if (!board.includes("")) {
+    statusEl.innerText = "🤝 Draw!";
+    gameOver = true;
+    return true;
+  }
+
+  return false;
+}
+
+function resetGame() {
+  board = ["","","","","","","","",""];
+  gameOver = false;
+  statusEl.innerText = "Your Turn (X)";
+  render();
+}
+
+render();
+</script>
+
+</body>
+</html>
