@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Neon Tic Tac Toe AI</title>
+  <title>Tic Tac Toe PRO</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <style>
     body {
@@ -16,16 +16,8 @@
       height: 100vh;
     }
 
-    h1 {
-      color: #0ff;
-      text-shadow: 0 0 10px #0ff;
-    }
-
-    #status {
-      margin: 10px;
-    }
-
     #board {
+      position: relative;
       display: grid;
       grid-template-columns: repeat(3, 90px);
       gap: 12px;
@@ -35,71 +27,114 @@
       width: 90px;
       height: 90px;
       background: #111;
-      border-radius: 15px;
       display: flex;
       align-items: center;
       justify-content: center;
       font-size: 32px;
+      border-radius: 12px;
       cursor: pointer;
       box-shadow: 0 0 10px #0ff;
-      transition: 0.2s;
     }
 
-    .cell:hover {
-      transform: scale(1.1);
-      box-shadow: 0 0 20px #0ff;
+    #winLine {
+      position: absolute;
+      height: 5px;
+      background: #0ff;
+      transform-origin: left;
     }
 
     button {
-      margin-top: 15px;
-      padding: 10px 20px;
+      margin-top: 10px;
+      padding: 8px 12px;
       background: #111;
       color: #0ff;
       border: 1px solid #0ff;
-      border-radius: 10px;
+      border-radius: 8px;
       cursor: pointer;
     }
   </style>
 </head>
 <body>
 
-<h1>❌⭕ Neon AI Game</h1>
+<h2>❌⭕ Tic Tac Toe PRO</h2>
 <div id="status">Your Turn (X)</div>
 <div id="board"></div>
+
 <button onclick="resetGame()">Restart</button>
+<button onclick="toggleMute()" id="muteBtn">🔊 Sound ON</button>
 
 <script>
-let board = ["","","","","","","","",""];
-let gameOver = false;
+// =======================
+// SOUND SYSTEM
+// =======================
+let isMuted = false;
 
-const patterns = [
+const bgMusic = new Audio("https://actions.google.com/sounds/v1/ambiences/warehouse_background.ogg");
+bgMusic.loop = true;
+bgMusic.volume = 0.3;
+
+const sounds = {
+  tap: new Audio("https://actions.google.com/sounds/v1/cartoon/pop.ogg"),
+  win: new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"),
+  lose: new Audio("https://actions.google.com/sounds/v1/cartoon/boing.ogg"),
+  draw: new Audio("https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg")
+};
+
+Object.values(sounds).forEach(s => s.volume = 0.7);
+
+function playSound(name) {
+  if (isMuted) return;
+  const s = sounds[name];
+  if (!s) return;
+  s.currentTime = 0;
+  s.play().catch(()=>{});
+}
+
+function vibrate(type) {
+  if (!navigator.vibrate || isMuted) return;
+  if (type === "tap") navigator.vibrate(30);
+  if (type === "win") navigator.vibrate([100,50,100]);
+  if (type === "lose") navigator.vibrate([200,50,200]);
+}
+
+document.addEventListener("click", () => {
+  if (!isMuted) bgMusic.play().catch(()=>{});
+}, { once: true });
+
+function toggleMute() {
+  isMuted = !isMuted;
+  const btn = document.getElementById("muteBtn");
+
+  if (isMuted) {
+    bgMusic.pause();
+    btn.innerText = "🔇 Sound OFF";
+  } else {
+    bgMusic.play().catch(()=>{});
+    btn.innerText = "🔊 Sound ON";
+  }
+}
+
+// =======================
+// GAME LOGIC
+// =======================
+let board = Array(9).fill("");
+let gameOver = false;
+let isAITurn = false;
+
+const statusEl = document.getElementById("status");
+const boardEl = document.getElementById("board");
+
+const wins = [
   [0,1,2],[3,4,5],[6,7,8],
   [0,3,6],[1,4,7],[2,5,8],
   [0,4,8],[2,4,6]
 ];
 
-const boardEl = document.getElementById("board");
-const statusEl = document.getElementById("status");
-
-// 🔊 sound
-function playSound(type) {
-  let audio = new Audio(
-    type === "win"
-      ? "https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"
-      : "https://actions.google.com/sounds/v1/cartoon/pop.ogg"
-  );
-  audio.play();
-}
-
-// 📳 vibration
-function vibrate() {
-  if (navigator.vibrate) navigator.vibrate(100);
-}
-
 function render() {
-  boardEl.innerHTML = "";
-  board.forEach((val,i) => {
-    let cell = document.createElement("div");
+  boardEl.innerHTML = '<div id="winLine"></div>';
+
+  board.forEach((val, i) => {
+    const cell = document.createElement("div");
     cell.className = "cell";
     cell.innerText = val;
     cell.onclick = () => playerMove(i);
@@ -107,48 +142,121 @@ function render() {
   });
 }
 
+// PLAYER
 function playerMove(i) {
-  if (board[i] || gameOver) return;
+  if (board[i] !== "" || gameOver || isAITurn) return;
 
   board[i] = "X";
   playSound("tap");
-  vibrate();
-
-  if (checkWin("X")) return;
+  vibrate("tap");
 
   render();
+
+  if (checkGameEnd("X")) return;
+
+  isAITurn = true;
   statusEl.innerText = "AI Thinking...";
 
-  setTimeout(aiMove, 400);
+  // ✅ AI DELAY = 1 SECOND
+  setTimeout(aiMove, 1000);
 }
 
+// AI (MINIMAX)
 function aiMove() {
-  let empty = board.map((v,i) => v === "" ? i : null).filter(v => v !== null);
-  let move = empty[Math.floor(Math.random() * empty.length)];
+  if (gameOver) return;
+
+  let bestScore = -Infinity;
+  let move;
+
+  for (let i = 0; i < 9; i++) {
+    if (board[i] === "") {
+      board[i] = "O";
+      let score = minimax(board, 0, false);
+      board[i] = "";
+
+      if (score > bestScore) {
+        bestScore = score;
+        move = i;
+      }
+    }
+  }
 
   board[move] = "O";
   playSound("tap");
 
-  if (checkWin("O")) return;
-
   render();
+
+  if (checkGameEnd("O")) return;
+
+  isAITurn = false;
   statusEl.innerText = "Your Turn (X)";
 }
 
-function checkWin(player) {
-  for (let p of patterns) {
-    let [a,b,c] = p;
-    if (board[a] === player && board[b] === player && board[c] === player) {
-      statusEl.innerText = (player === "X" ? "🎉 You Win!" : "🤖 AI Wins!");
-      playSound("win");
-      vibrate();
+// MINIMAX
+function minimax(b, depth, isMax) {
+  let result = checkWinnerStatic(b);
+  if (result !== null) return result;
+
+  if (isMax) {
+    let best = -Infinity;
+    for (let i = 0; i < 9; i++) {
+      if (b[i] === "") {
+        b[i] = "O";
+        best = Math.max(best, minimax(b, depth+1, false));
+        b[i] = "";
+      }
+    }
+    return best;
+  } else {
+    let best = Infinity;
+    for (let i = 0; i < 9; i++) {
+      if (b[i] === "") {
+        b[i] = "X";
+        best = Math.min(best, minimax(b, depth+1, true));
+        b[i] = "";
+      }
+    }
+    return best;
+  }
+}
+
+function checkWinnerStatic(b) {
+  for (let [a,b1,c] of wins) {
+    if (b[a] && b[a] === b[b1] && b[a] === b[c]) {
+      return b[a] === "O" ? 1 : -1;
+    }
+  }
+  if (!b.includes("")) return 0;
+  return null;
+}
+
+// END GAME
+function checkGameEnd(player) {
+  for (let [a,b,c] of wins) {
+    if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+
       gameOver = true;
+
+      highlight(a,b,c);
+      drawLine(a,c);
+
+      if (player === "X") {
+        statusEl.innerText = "🎉 You Win!";
+        playSound("win");
+        vibrate("win");
+      } else {
+        statusEl.innerText = "🤖 AI Wins!";
+        playSound("lose");
+        vibrate("lose");
+      }
+
       return true;
     }
   }
 
   if (!board.includes("")) {
     statusEl.innerText = "🤝 Draw!";
+    playSound("draw");
     gameOver = true;
     return true;
   }
@@ -156,9 +264,47 @@ function checkWin(player) {
   return false;
 }
 
+// UI
+function highlight(a,b,c) {
+  const cells = document.querySelectorAll(".cell");
+  [a,b,c].forEach(i => {
+    cells[i].style.background = "#0ff";
+    cells[i].style.color = "#000";
+  });
+}
+
+function drawLine(start, end) {
+  const cells = document.querySelectorAll(".cell");
+  const rect = boardEl.getBoundingClientRect();
+
+  const r1 = cells[start].getBoundingClientRect();
+  const r2 = cells[end].getBoundingClientRect();
+
+  const x1 = r1.left + r1.width/2 - rect.left;
+  const y1 = r1.top + r1.height/2 - rect.top;
+  const x2 = r2.left + r2.width/2 - rect.left;
+  const y2 = r2.top + r2.height/2 - rect.top;
+
+  const length = Math.hypot(x2-x1, y2-y1);
+  const angle = Math.atan2(y2-y1, x2-x1) * 180/Math.PI;
+
+  const line = document.getElementById("winLine");
+
+  line.style.left = x1 + "px";
+  line.style.top = y1 + "px";
+  line.style.width = "0px";
+  line.style.transform = `rotate(${angle}deg)`;
+  line.style.transition = "width 0.4s ease";
+
+  setTimeout(() => {
+    line.style.width = length + "px";
+  }, 50);
+}
+
 function resetGame() {
-  board = ["","","","","","","","",""];
+  board = Array(9).fill("");
   gameOver = false;
+  isAITurn = false;
   statusEl.innerText = "Your Turn (X)";
   render();
 }
